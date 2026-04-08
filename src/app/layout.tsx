@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Lora, Source_Sans_3 } from "next/font/google";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import PostHogProvider from "@/components/PostHogProvider";
 import "./globals.css";
 
 const lora = Lora({
@@ -33,9 +34,11 @@ export default function RootLayout({
       className={`${lora.variable} ${sourceSans.variable} h-full`}
     >
       <body className="min-h-full flex flex-col">
-        <Header />
-        <main className="flex-1">{children}</main>
-        <Footer />
+        <PostHogProvider>
+          <Header />
+          <main className="flex-1">{children}</main>
+          <Footer />
+        </PostHogProvider>
       </body>
     </html>
   );
