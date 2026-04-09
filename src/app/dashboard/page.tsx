@@ -115,6 +115,12 @@ export default async function DashboardPage() {
         </div>
         <div className="flex items-center gap-4">
           <Link
+            href="/dashboard/mtd"
+            className="inline-flex h-[48px] items-center justify-center rounded-lg border-2 border-primary px-6 text-base font-semibold text-primary transition-colors hover:bg-primary/5"
+          >
+            MTD Tax Prep
+          </Link>
+          <Link
             href="/dashboard/properties/new"
             className="inline-flex h-[48px] items-center justify-center rounded-lg bg-primary px-8 text-lg font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
           >
