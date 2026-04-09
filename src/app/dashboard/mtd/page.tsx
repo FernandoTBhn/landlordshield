@@ -7,8 +7,17 @@ import {
   guessColumns,
   type ParsedSheet,
   type ColumnGuess,
-  type RawRow,
 } from "@/lib/spreadsheet";
+import {
+  categoriseAll,
+  parseAmount,
+  getCategoryLabel,
+  MTD_CATEGORIES,
+  runHealthCheck,
+  type CategorisedTransaction,
+  type MtdCategory,
+  type HealthCheckItem,
+} from "@/lib/categorise";
 
 /* ── Constants ─────────────────────────────────────── */
 
@@ -75,6 +84,9 @@ export default function MtdPage() {
     quarter: "Q1",
   });
   const [mappingError, setMappingError] = useState<string | null>(null);
+
+  // Step 4: Categorised transactions
+  const [categorised, setCategorised] = useState<CategorisedTransaction[]>([]);
 
   // File handling
   const handleFile = useCallback(async (file: File) => {
@@ -202,12 +214,23 @@ export default function MtdPage() {
             sheet={sheet}
             mapping={mapping}
             onBack={() => setStep(2)}
-            onNext={() => setStep(4)}
+            onNext={() => {
+              // Run categorisation when moving to step 4
+              const rows = sheet.rows.map((row) => ({
+                date: String(row[mapping.dateCol] ?? ""),
+                description: String(row[mapping.descriptionCol] ?? ""),
+                amount: parseAmount(row[mapping.amountCol]),
+              }));
+              setCategorised(categoriseAll(rows));
+              setStep(4);
+            }}
           />
         )}
 
-        {step === 4 && (
+        {step === 4 && categorised.length > 0 && (
           <StepCategorise
+            transactions={categorised}
+            setTransactions={setCategorised}
             onBack={() => setStep(3)}
             onNext={() => setStep(5)}
           />
@@ -215,7 +238,7 @@ export default function MtdPage() {
 
         {step === 5 && (
           <StepSummary
-            sheet={sheet}
+            transactions={categorised}
             mapping={mapping}
             onBack={() => setStep(4)}
           />
@@ -712,32 +735,183 @@ function StepReview({
 
 /* ── Step 4: Categorise ────────────────────────────── */
 
+const CONFIDENCE_CONFIG = {
+  high: { dot: "bg-success", text: "text-success", label: "High", bg: "bg-success/10" },
+  medium: { dot: "bg-warning", text: "text-warning", label: "Medium", bg: "bg-warning/10" },
+  low: { dot: "bg-danger", text: "text-danger", label: "Low", bg: "bg-danger/10" },
+} as const;
+
 function StepCategorise({
+  transactions,
+  setTransactions,
   onBack,
   onNext,
 }: {
+  transactions: CategorisedTransaction[];
+  setTransactions: React.Dispatch<React.SetStateAction<CategorisedTransaction[]>>;
   onBack: () => void;
   onNext: () => void;
 }) {
+  const [filter, setFilter] = useState<"all" | "high" | "medium" | "low">("all");
+
+  const highCount = transactions.filter((t) => t.confidence === "high").length;
+  const mediumCount = transactions.filter((t) => t.confidence === "medium").length;
+  const lowCount = transactions.filter((t) => t.confidence === "low").length;
+  const confirmedCount = transactions.filter((t) => t.confirmed).length;
+
+  const filtered = filter === "all"
+    ? transactions
+    : transactions.filter((t) => t.confidence === filter);
+
+  const confirmAllHigh = () => {
+    setTransactions((prev) =>
+      prev.map((t) => (t.confidence === "high" ? { ...t, confirmed: true } : t)),
+    );
+  };
+
+  const updateCategory = (index: number, category: MtdCategory) => {
+    setTransactions((prev) =>
+      prev.map((t) =>
+        t.index === index ? { ...t, category, confirmed: true } : t,
+      ),
+    );
+  };
+
+  const toggleConfirm = (index: number) => {
+    setTransactions((prev) =>
+      prev.map((t) =>
+        t.index === index ? { ...t, confirmed: !t.confirmed } : t,
+      ),
+    );
+  };
+
   return (
     <div className="rounded-xl border border-border bg-card p-6 sm:p-8">
       <h2 className="text-xl sm:text-2xl font-bold mb-2">
         Step 4: Categorise transactions
       </h2>
-      <p className="text-base text-muted mb-6">
-        Transaction categorisation will be available in a future update. For now,
-        all transactions will be imported as-is.
+      <p className="text-base text-muted mb-4">
+        We auto-categorised your transactions. Review and confirm the results.
+        Green items are high confidence — you can confirm them all at once.
       </p>
 
-      <div className="rounded-lg bg-primary/5 border border-primary/20 p-6 mb-6 text-center">
-        <svg className="mx-auto mb-3 text-primary" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12" y1="8" x2="12" y2="12" />
-          <line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
-        <p className="text-base font-medium text-primary">
-          Coming soon — auto-categorisation of income and expenses
-        </p>
+      {/* Confidence summary */}
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 mb-6">
+        <button
+          type="button"
+          onClick={() => setFilter("all")}
+          className={`rounded-lg border p-3 text-center transition-colors ${filter === "all" ? "border-primary bg-primary/5" : "border-border"}`}
+        >
+          <p className="text-xl font-bold">{transactions.length}</p>
+          <p className="text-sm text-muted">All</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilter("high")}
+          className={`rounded-lg border p-3 text-center transition-colors ${filter === "high" ? "border-success bg-success/5" : "border-border"}`}
+        >
+          <p className="text-xl font-bold text-success">{highCount}</p>
+          <p className="text-sm text-muted">High</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilter("medium")}
+          className={`rounded-lg border p-3 text-center transition-colors ${filter === "medium" ? "border-warning bg-warning/5" : "border-border"}`}
+        >
+          <p className="text-xl font-bold text-warning">{mediumCount}</p>
+          <p className="text-sm text-muted">Medium</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilter("low")}
+          className={`rounded-lg border p-3 text-center transition-colors ${filter === "low" ? "border-danger bg-danger/5" : "border-border"}`}
+        >
+          <p className="text-xl font-bold text-danger">{lowCount}</p>
+          <p className="text-sm text-muted">Low</p>
+        </button>
+      </div>
+
+      {/* Batch confirm high */}
+      {highCount > 0 && confirmedCount < transactions.length && (
+        <button
+          type="button"
+          onClick={confirmAllHigh}
+          className="mb-6 h-[48px] w-full rounded-lg bg-success px-6 text-base font-semibold text-success-foreground transition-colors hover:bg-success/90"
+        >
+          Confirm all {highCount} high-confidence transactions
+        </button>
+      )}
+
+      {/* Progress */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="flex-1 h-2 rounded-full bg-border overflow-hidden">
+          <div
+            className="h-full rounded-full bg-success transition-all"
+            style={{ width: `${transactions.length > 0 ? (confirmedCount / transactions.length) * 100 : 0}%` }}
+          />
+        </div>
+        <span className="text-sm font-semibold text-muted whitespace-nowrap">
+          {confirmedCount}/{transactions.length} confirmed
+        </span>
+      </div>
+
+      {/* Transaction list */}
+      <div className="flex flex-col gap-3 mb-6 max-h-[500px] overflow-y-auto">
+        {filtered.map((t) => {
+          const conf = CONFIDENCE_CONFIG[t.confidence];
+          return (
+            <div
+              key={t.index}
+              className={`rounded-lg border p-4 transition-colors ${
+                t.confirmed ? "border-success/30 bg-success/[0.03]" : "border-border"
+              }`}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                {/* Confidence dot + description */}
+                <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                  <span className={`shrink-0 h-3 w-3 rounded-full ${conf.dot}`} aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base font-medium truncate">{t.description || "No description"}</p>
+                    <p className="text-sm text-muted">{t.date} &middot; {formatAmount(t.amount)}</p>
+                  </div>
+                </div>
+
+                {/* Category select */}
+                <select
+                  value={t.category}
+                  onChange={(e) => updateCategory(t.index, e.target.value as MtdCategory)}
+                  aria-label={`Category for ${t.description}`}
+                  className="h-[40px] rounded-lg border border-border bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring sm:w-56"
+                >
+                  {MTD_CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+
+                {/* Confidence badge */}
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${conf.bg} ${conf.text} shrink-0`}>
+                  {conf.label}
+                </span>
+
+                {/* Confirm toggle */}
+                <button
+                  type="button"
+                  onClick={() => toggleConfirm(t.index)}
+                  aria-label={t.confirmed ? "Unconfirm" : "Confirm"}
+                  className={`shrink-0 h-8 w-8 rounded-md flex items-center justify-center transition-colors ${
+                    t.confirmed
+                      ? "bg-success text-success-foreground"
+                      : "border border-border text-muted hover:border-success hover:text-success"
+                  }`}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-between">
@@ -755,42 +929,93 @@ function StepCategorise({
 /* ── Step 5: Summary ───────────────────────────────── */
 
 function StepSummary({
-  sheet,
+  transactions,
   mapping,
   onBack,
 }: {
-  sheet: ParsedSheet | null;
+  transactions: CategorisedTransaction[];
   mapping: MappingConfig;
   onBack: () => void;
 }) {
-  const rows = sheet?.rows ?? [];
+  const incomeLabel = INCOME_TYPES.find((t) => t.value === mapping.incomeType)?.label ?? mapping.incomeType;
+  const taxYearLabel = TAX_YEARS.find((t) => t.value === mapping.taxYear)?.label ?? mapping.taxYear;
+  const quarterLabel = QUARTERS.find((q) => q.value === mapping.quarter)?.label ?? mapping.quarter;
 
-  // Calculate totals
+  // Totals
   let totalIncome = 0;
   let totalExpenses = 0;
   let incomeCount = 0;
   let expenseCount = 0;
 
-  for (const row of rows) {
-    const raw = String(row[mapping.amountCol] ?? "0");
-    const cleaned = raw.replace(/[£$€,\s]/g, "");
-    const num = parseFloat(cleaned);
-    if (isNaN(num)) continue;
-
-    if (num >= 0) {
-      totalIncome += num;
+  for (const t of transactions) {
+    if (t.amount >= 0) {
+      totalIncome += t.amount;
       incomeCount++;
     } else {
-      totalExpenses += Math.abs(num);
+      totalExpenses += Math.abs(t.amount);
       expenseCount++;
     }
   }
-
   const netProfit = totalIncome - totalExpenses;
 
-  const incomeLabel = INCOME_TYPES.find((t) => t.value === mapping.incomeType)?.label ?? mapping.incomeType;
-  const taxYearLabel = TAX_YEARS.find((t) => t.value === mapping.taxYear)?.label ?? mapping.taxYear;
-  const quarterLabel = QUARTERS.find((q) => q.value === mapping.quarter)?.label ?? mapping.quarter;
+  // Category breakdown
+  const byCategory = new Map<string, { count: number; total: number }>();
+  for (const t of transactions) {
+    const entry = byCategory.get(t.category) ?? { count: 0, total: 0 };
+    entry.count++;
+    entry.total += t.amount;
+    byCategory.set(t.category, entry);
+  }
+
+  // Health check
+  const healthChecks = runHealthCheck(transactions, mapping.quarter, mapping.taxYear);
+  const passCount = healthChecks.filter((c) => c.status === "pass").length;
+  const overallHealth = passCount === healthChecks.length ? "pass" : healthChecks.some((c) => c.status === "fail") ? "fail" : "warn";
+  const healthColour = { pass: "text-success", warn: "text-warning", fail: "text-danger" }[overallHealth];
+  const healthLabel = { pass: "All clear", warn: "Needs review", fail: "Issues found" }[overallHealth];
+
+  // Export CSV
+  const exportCsv = () => {
+    const header = "Date,Description,Amount,Category,Confidence,Confirmed\n";
+    const rows = transactions.map((t) =>
+      [
+        `"${t.date}"`,
+        `"${t.description.replace(/"/g, '""')}"`,
+        t.amount.toFixed(2),
+        `"${getCategoryLabel(t.category)}"`,
+        t.confidence,
+        t.confirmed ? "Yes" : "No",
+      ].join(","),
+    );
+    const csv = header + rows.join("\n");
+    downloadFile(csv, `mtd-${mapping.taxYear}-${mapping.quarter}.csv`, "text/csv");
+  };
+
+  // Export health check
+  const exportHealthCheck = () => {
+    const lines = [
+      `MTD Health Check — ${quarterLabel} ${taxYearLabel}`,
+      `Generated: ${new Date().toLocaleDateString("en-GB")}`,
+      `Overall: ${healthLabel}`,
+      "",
+      ...healthChecks.map((c) => {
+        const icon = c.status === "pass" ? "PASS" : c.status === "warn" ? "WARN" : "FAIL";
+        return `[${icon}] ${c.label}\n      ${c.detail}`;
+      }),
+      "",
+      `Summary:`,
+      `  Total Income: £${totalIncome.toFixed(2)} (${incomeCount} transactions)`,
+      `  Total Expenses: £${totalExpenses.toFixed(2)} (${expenseCount} transactions)`,
+      `  Net Profit: £${netProfit.toFixed(2)}`,
+      `  Income Type: ${incomeLabel}`,
+      "",
+      "Category Breakdown:",
+      ...[...byCategory.entries()].map(
+        ([cat, { count, total }]) => `  ${getCategoryLabel(cat)}: ${count} txns, £${total.toFixed(2)}`,
+      ),
+    ];
+    downloadFile(lines.join("\n"), `health-check-${mapping.taxYear}-${mapping.quarter}.txt`, "text/plain");
+  };
 
   return (
     <div className="rounded-xl border border-border bg-card p-6 sm:p-8">
@@ -798,29 +1023,66 @@ function StepSummary({
         Step 5: Quarterly Summary
       </h2>
       <p className="text-base text-muted mb-6">
-        Here&rsquo;s an overview of your data for {quarterLabel} of {taxYearLabel}.
+        Here&rsquo;s your overview for {quarterLabel} of {taxYearLabel}.
       </p>
 
-      {/* Summary cards */}
+      {/* Financial summary cards */}
       <div className="grid gap-4 sm:grid-cols-3 mb-8">
-        <SummaryCard
-          label="Total Income"
-          value={`£${totalIncome.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
-          sub={`${incomeCount} transactions`}
-          colour="success"
-        />
-        <SummaryCard
-          label="Total Expenses"
-          value={`£${totalExpenses.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
-          sub={`${expenseCount} transactions`}
-          colour="danger"
-        />
-        <SummaryCard
-          label="Net Profit"
-          value={`£${netProfit.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
-          sub={incomeLabel}
-          colour={netProfit >= 0 ? "primary" : "danger"}
-        />
+        <SummaryCard label="Total Income" value={`£${totalIncome.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`} sub={`${incomeCount} transactions`} colour="success" />
+        <SummaryCard label="Total Expenses" value={`£${totalExpenses.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`} sub={`${expenseCount} transactions`} colour="danger" />
+        <SummaryCard label="Net Profit" value={`£${netProfit.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`} sub={incomeLabel} colour={netProfit >= 0 ? "primary" : "danger"} />
+      </div>
+
+      {/* Category breakdown */}
+      <div className="mb-8">
+        <h3 className="text-lg font-bold mb-3">Category Breakdown</h3>
+        <div className="rounded-lg border border-border overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-background">
+                <th className="px-4 py-2.5 text-left font-bold border-b border-border">Category</th>
+                <th className="px-4 py-2.5 text-right font-bold border-b border-border">Transactions</th>
+                <th className="px-4 py-2.5 text-right font-bold border-b border-border">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...byCategory.entries()]
+                .sort((a, b) => Math.abs(b[1].total) - Math.abs(a[1].total))
+                .map(([cat, { count, total }], i) => (
+                  <tr key={cat} className={i % 2 === 0 ? "bg-card" : "bg-background"}>
+                    <td className="px-4 py-2.5 border-b border-border/50 font-medium">{getCategoryLabel(cat)}</td>
+                    <td className="px-4 py-2.5 border-b border-border/50 text-right text-muted">{count}</td>
+                    <td className="px-4 py-2.5 border-b border-border/50 text-right font-mono">{formatAmount(total)}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Health Check */}
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-4">
+          <h3 className="text-lg font-bold">Health Check</h3>
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold ${
+            overallHealth === "pass" ? "bg-success/10 text-success" :
+            overallHealth === "warn" ? "bg-warning/10 text-warning" :
+            "bg-danger/10 text-danger"
+          }`}>
+            <span className={`h-2.5 w-2.5 rounded-full ${
+              overallHealth === "pass" ? "bg-success" :
+              overallHealth === "warn" ? "bg-warning" :
+              "bg-danger"
+            }`} aria-hidden="true" />
+            {healthLabel} ({passCount}/{healthChecks.length})
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          {healthChecks.map((check) => (
+            <HealthCheckRow key={check.id} check={check} />
+          ))}
+        </div>
       </div>
 
       {/* Config summary */}
@@ -839,20 +1101,31 @@ function StepSummary({
         </div>
       </div>
 
-      <div className="rounded-lg bg-success/10 border border-success/30 p-5 mb-8">
-        <div className="flex items-start gap-3">
-          <svg className="shrink-0 text-success mt-0.5" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-            <polyline points="22 4 12 14.01 9 11.01" />
+      {/* Export buttons */}
+      <div className="grid gap-3 sm:grid-cols-2 mb-8">
+        <button
+          type="button"
+          onClick={exportCsv}
+          className="h-[48px] rounded-lg border-2 border-primary px-6 text-base font-semibold text-primary transition-colors hover:bg-primary/5 flex items-center justify-center gap-2"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
-          <div>
-            <p className="font-bold text-success mb-1">Data processed successfully</p>
-            <p className="text-base text-muted">
-              {rows.length} transactions imported. You can use this summary for your
-              HMRC quarterly submission. Full MTD submission integration is coming soon.
-            </p>
-          </div>
-        </div>
+          Export CSV
+        </button>
+        <button
+          type="button"
+          onClick={exportHealthCheck}
+          className="h-[48px] rounded-lg border-2 border-primary px-6 text-base font-semibold text-primary transition-colors hover:bg-primary/5 flex items-center justify-center gap-2"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+          </svg>
+          Download Health Check
+        </button>
       </div>
 
       <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-between">
@@ -865,6 +1138,26 @@ function StepSummary({
         >
           Back to Dashboard
         </Link>
+      </div>
+    </div>
+  );
+}
+
+function HealthCheckRow({ check }: { check: HealthCheckItem }) {
+  const config = {
+    pass: { dot: "bg-success", bg: "bg-success/10 border-success/30", text: "text-success", icon: "M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4 12 14.01 9 11.01" },
+    warn: { dot: "bg-warning", bg: "bg-warning/10 border-warning/30", text: "text-warning", icon: "" },
+    fail: { dot: "bg-danger", bg: "bg-danger/10 border-danger/30", text: "text-danger", icon: "" },
+  }[check.status];
+
+  return (
+    <div className={`rounded-lg border p-4 ${config.bg}`}>
+      <div className="flex items-start gap-3">
+        <span className={`shrink-0 mt-0.5 h-3.5 w-3.5 rounded-full ${config.dot}`} aria-hidden="true" />
+        <div>
+          <p className={`font-bold ${config.text}`}>{check.label}</p>
+          <p className="text-sm text-muted mt-0.5">{check.detail}</p>
+        </div>
       </div>
     </div>
   );
@@ -900,8 +1193,19 @@ function SummaryCard({
 
 function formatAmount(val: string | number | null | undefined): string {
   if (val == null) return "—";
-  const str = String(val).replace(/[£$€,\s]/g, "");
-  const num = parseFloat(str);
+  const num = typeof val === "number" ? val : parseFloat(String(val).replace(/[£$€,\s]/g, ""));
   if (isNaN(num)) return String(val);
   return `£${num.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`;
+}
+
+function downloadFile(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
