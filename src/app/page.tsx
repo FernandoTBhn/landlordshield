@@ -40,7 +40,15 @@ const jsonLd = {
   },
 };
 
+function getDaysUntilDeadline() {
+  const deadline = new Date("2026-05-31T23:59:59Z");
+  const now = new Date();
+  return Math.max(0, Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
 export default function Home() {
+  const daysLeft = getDaysUntilDeadline();
+
   return (
     <>
       <script
@@ -60,24 +68,24 @@ export default function Home() {
         />
 
         <div className="relative mx-auto max-w-5xl px-4 sm:px-6 py-20 sm:py-28 lg:py-36 text-center">
-          {/* Urgency pill */}
-          <span className="inline-flex items-center gap-2 rounded-full border border-danger/40 bg-danger/15 px-4 py-1.5 text-sm font-semibold text-danger-foreground mb-8">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-danger" />
+          {/* Urgency badge */}
+          <span className="inline-flex items-center gap-2.5 rounded-full bg-danger px-5 py-2 text-base font-bold text-white mb-8 shadow-lg">
+            <span className="relative flex h-3 w-3">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-white" />
             </span>
-            Deadline: 31 May 2025
+            Deadline: 31 May 2026 — {daysLeft} days left
           </span>
 
-          <h1 className="text-3xl sm:text-4xl lg:text-[3.25rem] font-bold leading-[1.15] tracking-tight text-white mb-6 max-w-4xl mx-auto">
+          <h1 className="text-[2rem] sm:text-[2.75rem] lg:text-[3.5rem] font-bold leading-[1.12] tracking-tight text-white mb-6 max-w-4xl mx-auto" style={{ color: "#FFFFFF" }}>
             Know if you&rsquo;re compliant with the Renters&rsquo; Rights Act
             &mdash;&nbsp;in&nbsp;5&nbsp;minutes
           </h1>
 
-          <p className="text-lg sm:text-xl text-primary-foreground/85 max-w-2xl mx-auto mb-10 leading-relaxed">
+          <p className="text-lg sm:text-xl max-w-2xl mx-auto mb-10 leading-relaxed" style={{ color: "rgba(255,255,255,0.85)" }}>
             The Information Sheet deadline is{" "}
-            <strong className="text-white">31&nbsp;May</strong>. The fine is up
-            to <strong className="text-white">&pound;7,000 per tenancy</strong>.
+            <strong className="text-white">31&nbsp;May&nbsp;2026</strong>. The fine is up
+            to <strong style={{ color: "#F5C842" }}>&pound;7,000 per tenancy</strong>.
             Don&rsquo;t wait until it&rsquo;s too late.
           </p>
 
@@ -239,20 +247,20 @@ export default function Home() {
 
             <div className="flex flex-col gap-10">
               <TimelineItem
-                date="1 May 2025"
+                date="1 May 2026"
                 title="Renters' Rights Act — Phase 1"
                 description="New tenancies fall under the Act. Section 21 'no-fault' evictions are abolished for new lets."
                 colour="warning"
               />
               <TimelineItem
-                date="31 May 2025"
+                date="31 May 2026"
                 title="Information Sheet deadline"
                 description="All landlords must serve the Government-prescribed Information Sheet to every tenant. Fines up to £7,000 per tenancy for non-compliance."
                 colour="danger"
                 highlight
               />
               <TimelineItem
-                date="July 2025"
+                date="July 2026"
                 title="Making Tax Digital — Q1 deadline"
                 description="First quarterly HMRC submission for landlords with income over £50,000. Digital record-keeping is now required."
                 colour="primary"
