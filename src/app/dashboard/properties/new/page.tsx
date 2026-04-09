@@ -5,9 +5,21 @@ import Link from "next/link";
 import { addProperty, type AddPropertyState } from "./actions";
 
 const tenancyOptions = [
-  { value: "ast_periodic", label: "AST Periodic (rolling)" },
-  { value: "fixed", label: "Fixed Term" },
-  { value: "other", label: "Other" },
+  {
+    value: "ast_periodic",
+    label: "Periodic (month-to-month)",
+    help: "The most common type. The tenancy continues month-to-month after any fixed term ends.",
+  },
+  {
+    value: "fixed",
+    label: "Fixed Term",
+    help: "The tenancy has a set end date (e.g. 12 months). Choose this if the fixed term hasn't ended yet.",
+  },
+  {
+    value: "other",
+    label: "Other",
+    help: "Licence, lodger agreement, or any arrangement that isn't a standard AST.",
+  },
 ] as const;
 
 export default function NewPropertyPage() {
@@ -95,7 +107,7 @@ export default function NewPropertyPage() {
               className="block text-lg font-medium mb-2"
             >
               Tenant Email
-              <span className="text-muted font-normal ml-2">(optional)</span>
+              <span className="text-muted font-normal ml-2">(recommended)</span>
             </label>
             <input
               id="tenantEmail"
@@ -105,6 +117,9 @@ export default function NewPropertyPage() {
               placeholder="e.g. john@example.com"
               className="w-full h-[48px] rounded-lg border border-border bg-card px-4 text-base text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
             />
+            <p className="text-sm text-muted mt-1.5">
+              We need this to email the Information Sheet to your tenant. You can add it later.
+            </p>
           </div>
 
           {/* Tenancy Type */}
@@ -112,20 +127,26 @@ export default function NewPropertyPage() {
             <legend className="text-lg font-medium mb-3">
               Tenancy Type
             </legend>
+            <p className="text-sm text-muted mb-3">
+              Not sure? Most private tenancies are &ldquo;Periodic&rdquo; — the tenancy rolls on month-to-month.
+            </p>
             <div className="flex flex-col gap-3">
               {tenancyOptions.map((opt) => (
                 <label
                   key={opt.value}
-                  className="flex items-center gap-3 rounded-lg border border-border bg-card p-4 cursor-pointer has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-ring transition-all"
+                  className="flex items-start gap-3 rounded-lg border border-border bg-card p-4 cursor-pointer has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-ring transition-all"
                 >
                   <input
                     type="radio"
                     name="tenancyType"
                     value={opt.value}
                     defaultChecked={opt.value === "ast_periodic"}
-                    className="h-5 w-5 accent-primary"
+                    className="h-5 w-5 accent-primary mt-0.5"
                   />
-                  <span className="text-base font-medium">{opt.label}</span>
+                  <div>
+                    <span className="text-base font-medium">{opt.label}</span>
+                    <p className="text-sm text-muted mt-0.5">{opt.help}</p>
+                  </div>
                 </label>
               ))}
             </div>

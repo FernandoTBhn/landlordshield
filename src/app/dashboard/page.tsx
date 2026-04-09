@@ -9,6 +9,7 @@ import {
   type ComplianceScore,
 } from "@/lib/compliance";
 import PostHogTracker from "./PostHogTracker";
+import SuccessToastClient from "./SuccessToast";
 
 type PropertyWithDetails = Property & {
   tenants: Pick<Tenant, "full_name" | "email" | "tenancy_type">[];
@@ -107,11 +108,35 @@ export default async function DashboardPage() {
       })
     : null;
 
+  // Onboarding checklist state
+  const hasProperty = items.length > 0;
+  const hasCerts = (totalCerts ?? 0) > 0;
+  const hasInfoSheet = (totalInfoSheets ?? 0) > 0;
+  const onboardingComplete = hasProperty && hasCerts && hasInfoSheet;
+
+  // Aggregated compliance score
+  const scores = items
+    .map((p) => p.complianceScore?.total ?? 0);
+  const avgScore = scores.length > 0
+    ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+    : 0;
+  const worstProperty = items.length > 0
+    ? items.reduce((worst, p) =>
+        (p.complianceScore?.total ?? 0) < (worst.complianceScore?.total ?? 0) ? p : worst,
+      )
+    : null;
+
   return (
     <div className="mx-auto max-w-6xl px-4 sm:px-6 py-12">
       <Suspense>
         <PostHogTracker />
       </Suspense>
+
+      {/* Success toast (from query params) */}
+      <Suspense>
+        <SuccessToastClient />
+      </Suspense>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
         <div>
@@ -139,8 +164,29 @@ export default async function DashboardPage() {
         </div>
       </div>
 
+      {/* Aggregated compliance score */}
+      {items.length > 0 && (
+        <AggregatedScore
+          score={avgScore}
+          propertyCount={items.length}
+          worstPropertyName={worstProperty?.address_line_1 ?? worstProperty?.name ?? null}
+          worstPropertyId={worstProperty?.id ?? null}
+          worstScore={worstProperty?.complianceScore?.total ?? null}
+        />
+      )}
+
+      {/* Onboarding checklist (shown until all 3 steps done) */}
+      {!onboardingComplete && (
+        <OnboardingChecklist
+          hasProperty={hasProperty}
+          hasCerts={hasCerts}
+          hasInfoSheet={hasInfoSheet}
+          firstPropertyId={items[0]?.id ?? null}
+        />
+      )}
+
       {/* Empty state */}
-      {items.length === 0 && <EmptyState />}
+      {items.length === 0 && !hasProperty && <EmptyState />}
 
       {/* Property cards */}
       {items.length > 0 && (
@@ -161,6 +207,166 @@ export default async function DashboardPage() {
         infoSheetsCount={totalInfoSheets ?? 0}
         memberSince={memberSince}
       />
+    </div>
+  );
+}
+
+/* ── Improvement 4: Aggregated Score ──────────────── */
+
+function AggregatedScore({
+  score,
+  propertyCount,
+  worstPropertyName,
+  worstPropertyId,
+  worstScore,
+}: {
+  score: number;
+  propertyCount: number;
+  worstPropertyName: string | null;
+  worstPropertyId: string | null;
+  worstScore: number | null;
+}) {
+  const { bar, text, label } = getScoreColour(score);
+  const needsAttention = worstScore !== null && worstScore < 80 && propertyCount > 1;
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-6 shadow-sm mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="flex-1">
+          <div className="flex items-center gap-3 mb-2">
+            <span className={`text-3xl font-bold ${text}`}>{score}%</span>
+            <div>
+              <p className="text-base font-bold">Overall Compliance</p>
+              <p className={`text-sm font-semibold ${text}`}>{label}</p>
+            </div>
+          </div>
+          <div
+            className="h-3 w-full rounded-full bg-border overflow-hidden"
+            role="progressbar"
+            aria-valuenow={score}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`Overall compliance score: ${score}%`}
+          >
+            <div
+              className={`h-full rounded-full transition-all ${bar}`}
+              style={{ width: `${score}%` }}
+            />
+          </div>
+        </div>
+        {needsAttention && worstPropertyId && worstPropertyName && (
+          <Link
+            href={`/dashboard/properties/${worstPropertyId}`}
+            className="inline-flex h-[44px] items-center gap-2 rounded-lg bg-danger/10 border border-danger/30 px-4 text-sm font-semibold text-danger transition-colors hover:bg-danger/15 shrink-0"
+          >
+            <span className="h-2.5 w-2.5 rounded-full bg-danger" aria-hidden="true" />
+            {worstPropertyName} needs attention ({worstScore}%)
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Improvement 1: Onboarding Checklist ──────────── */
+
+function OnboardingChecklist({
+  hasProperty,
+  hasCerts,
+  hasInfoSheet,
+  firstPropertyId,
+}: {
+  hasProperty: boolean;
+  hasCerts: boolean;
+  hasInfoSheet: boolean;
+  firstPropertyId: string | null;
+}) {
+  const steps = [
+    {
+      done: hasProperty,
+      label: "Add your first property",
+      description: "Enter your property address and tenant details.",
+      href: "/dashboard/properties/new",
+      cta: "Add property",
+    },
+    {
+      done: hasCerts,
+      label: "Record your certificates",
+      description: "Add gas safety, EPC, EICR and other certificate dates.",
+      href: firstPropertyId ? `/dashboard/properties/${firstPropertyId}` : "#",
+      cta: "Add certificates",
+    },
+    {
+      done: hasInfoSheet,
+      label: "Serve the Information Sheet",
+      description: "Email the legally required prescribed information to your tenant.",
+      href: firstPropertyId ? `/dashboard/properties/${firstPropertyId}` : "#",
+      cta: "Send info sheet",
+    },
+  ];
+
+  const doneCount = steps.filter((s) => s.done).length;
+
+  return (
+    <div className="rounded-xl border-2 border-primary/20 bg-primary/[0.03] p-6 sm:p-8 mb-8">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold">Getting started</h2>
+        <span className="text-sm font-bold text-primary">{doneCount}/3 complete</span>
+      </div>
+
+      {/* Progress bar */}
+      <div className="h-2 w-full rounded-full bg-border overflow-hidden mb-6">
+        <div
+          className="h-full rounded-full bg-primary transition-all"
+          style={{ width: `${(doneCount / 3) * 100}%` }}
+        />
+      </div>
+
+      <div className="flex flex-col gap-4">
+        {steps.map((step, i) => (
+          <div
+            key={i}
+            className={`flex items-center gap-4 rounded-lg border p-4 transition-colors ${
+              step.done
+                ? "border-success/30 bg-success/[0.03]"
+                : "border-border bg-card"
+            }`}
+          >
+            {/* Step number / checkmark */}
+            <span
+              className={`shrink-0 flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
+                step.done
+                  ? "bg-success text-success-foreground"
+                  : "bg-primary text-primary-foreground"
+              }`}
+            >
+              {step.done ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              ) : (
+                i + 1
+              )}
+            </span>
+
+            <div className="flex-1 min-w-0">
+              <p className={`text-base font-semibold ${step.done ? "text-success line-through" : "text-foreground"}`}>
+                {step.label}
+              </p>
+              <p className="text-sm text-muted">{step.description}</p>
+            </div>
+
+            {!step.done && (
+              <Link
+                href={step.href}
+                className="shrink-0 inline-flex h-[40px] items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                {step.cta}
+              </Link>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

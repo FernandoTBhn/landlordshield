@@ -83,5 +83,5 @@ export async function addProperty(
 
   const isFirst = count === 1;
 
-  redirect(`/dashboard?newProperty=${property.id}&first=${isFirst}`);
+  redirect(`/dashboard?success=property&newProperty=${property.id}&first=${isFirst}`);
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { saveCertificate, type SaveCertState } from "./actions";
 
 type TrafficLight = "green" | "yellow" | "red" | "none";
@@ -45,6 +45,29 @@ const lightConfig: Record<
   },
 };
 
+// Standard validity periods for each certificate type (in months)
+const VALIDITY_MONTHS: Record<string, number> = {
+  gas_safety: 12,
+  eicr: 60,       // 5 years
+  epc: 120,       // 10 years
+  deposit_protection: 0, // no fixed expiry — user sets it
+  smoke_co: 12,
+};
+
+const VALIDITY_HINTS: Record<string, string> = {
+  gas_safety: "Usually valid for 12 months.",
+  eicr: "Usually valid for 5 years.",
+  epc: "Usually valid for 10 years.",
+  deposit_protection: "Check your scheme for the protection end date.",
+  smoke_co: "Test annually — set a 12-month reminder.",
+};
+
+function addMonths(dateStr: string, months: number): string {
+  const d = new Date(dateStr);
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString().split("T")[0];
+}
+
 export default function CertificateRow({
   propertyId,
   certType,
@@ -58,6 +81,17 @@ export default function CertificateRow({
     saveCertificate,
     {},
   );
+
+  const [localExpiry, setLocalExpiry] = useState(expiryDate ?? "");
+
+  // Auto-fill expiry when issued date changes and no expiry is set
+  const handleIssuedChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newIssued = e.target.value;
+    const months = VALIDITY_MONTHS[certType];
+    if (newIssued && months > 0 && !expiryDate) {
+      setLocalExpiry(addMonths(newIssued, months));
+    }
+  };
 
   const cfg = lightConfig[light];
 
@@ -88,6 +122,13 @@ export default function CertificateRow({
         <input type="hidden" name="propertyId" value={propertyId} />
         <input type="hidden" name="certType" value={certType} />
 
+        {/* Validity hint */}
+        {VALIDITY_HINTS[certType] && light === "none" && (
+          <p className="text-sm text-primary mb-3">
+            {VALIDITY_HINTS[certType]}
+          </p>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
             <label
@@ -101,6 +142,7 @@ export default function CertificateRow({
               name="issuedDate"
               type="date"
               defaultValue={issuedDate ?? ""}
+              onChange={handleIssuedChange}
               className="w-full h-[48px] rounded-lg border border-border bg-card px-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
             />
           </div>
@@ -110,12 +152,16 @@ export default function CertificateRow({
               className="block text-base font-medium mb-2"
             >
               Expiry Date
+              {localExpiry && !expiryDate && (
+                <span className="text-sm text-success font-normal ml-2">(auto-filled)</span>
+              )}
             </label>
             <input
               id={`${certType}-expiry`}
               name="expiryDate"
               type="date"
-              defaultValue={expiryDate ?? ""}
+              value={localExpiry}
+              onChange={(e) => setLocalExpiry(e.target.value)}
               className="w-full h-[48px] rounded-lg border border-border bg-card px-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
             />
           </div>
