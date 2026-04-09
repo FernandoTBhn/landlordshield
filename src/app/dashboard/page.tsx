@@ -3,11 +3,17 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import type { Property, Tenant, Certificate } from "@/lib/types";
+import {
+  calculateComplianceScore,
+  getScoreColour,
+  type ComplianceScore,
+} from "@/lib/compliance";
 import PostHogTracker from "./PostHogTracker";
 
 type PropertyWithDetails = Property & {
   tenants: Pick<Tenant, "full_name" | "email" | "tenancy_type">[];
   certificates: Pick<Certificate, "cert_type" | "expiry_date" | "status">[];
+  complianceScore?: ComplianceScore;
 };
 
 type TrafficLight = "green" | "yellow" | "red";
@@ -50,7 +56,47 @@ export default async function DashboardPage() {
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
-  const items = (properties ?? []) as PropertyWithDetails[];
+  const raw = (properties ?? []) as PropertyWithDetails[];
+
+  // Fetch info-sheet counts per property (for compliance score)
+  const { data: infoSheets } = await supabase
+    .from("information_sheet_records")
+    .select("property_id")
+    .eq("user_id", user.id)
+    .eq("email_status", "sent");
+
+  const servedPropertyIds = new Set(
+    (infoSheets ?? []).map((r: { property_id: string }) => r.property_id),
+  );
+
+  // Fetch aggregate counters for history card
+  const { count: totalCerts } = await supabase
+    .from("certificates")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id);
+
+  const { count: totalInfoSheets } = await supabase
+    .from("information_sheet_records")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("email_status", "sent");
+
+  // Compute compliance scores
+  const items = raw.map((p) => ({
+    ...p,
+    complianceScore: calculateComplianceScore({
+      hasInfoSheetServed: servedPropertyIds.has(p.id),
+      certificates: p.certificates,
+      tenancyType: p.tenants[0]?.tenancy_type ?? null,
+    }),
+  }));
+
+  const memberSince = user.created_at
+    ? new Date(user.created_at).toLocaleDateString("en-GB", {
+        month: "long",
+        year: "numeric",
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl px-4 sm:px-6 py-12">
@@ -89,6 +135,14 @@ export default async function DashboardPage() {
           ))}
         </div>
       )}
+
+      {/* Your Compliance History */}
+      <ComplianceHistory
+        propertiesCount={items.length}
+        certificatesCount={totalCerts ?? 0}
+        infoSheetsCount={totalInfoSheets ?? 0}
+        memberSince={memberSince}
+      />
     </div>
   );
 }
@@ -190,6 +244,11 @@ function PropertyCard({ property }: { property: PropertyWithDetails }) {
           <p className="text-base text-muted italic">No tenant assigned</p>
         )}
 
+        {/* Compliance score bar */}
+        {property.complianceScore && (
+          <ComplianceBar score={property.complianceScore.total} />
+        )}
+
         {/* Certificates summary */}
         <div className="mt-auto pt-4 border-t border-border">
           {property.certificates.length === 0 ? (
@@ -208,6 +267,117 @@ function PropertyCard({ property }: { property: PropertyWithDetails }) {
         </div>
       </div>
     </Link>
+  );
+}
+
+function ComplianceBar({ score }: { score: number }) {
+  const { bar, text, label } = getScoreColour(score);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-muted">Compliance</span>
+        <span className={`text-sm font-bold ${text}`}>
+          {score}% — {label}
+        </span>
+      </div>
+      <div
+        className="h-2.5 w-full rounded-full bg-border overflow-hidden"
+        role="progressbar"
+        aria-valuenow={score}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`Compliance score: ${score}%`}
+      >
+        <div
+          className={`h-full rounded-full transition-all ${bar}`}
+          style={{ width: `${score}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ComplianceHistory({
+  propertiesCount,
+  certificatesCount,
+  infoSheetsCount,
+  memberSince,
+}: {
+  propertiesCount: number;
+  certificatesCount: number;
+  infoSheetsCount: number;
+  memberSince: string | null;
+}) {
+  const stats = [
+    {
+      label: "Properties tracked",
+      value: propertiesCount,
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-primary">
+          <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z" />
+          <path d="M9 21V12h6v9" />
+        </svg>
+      ),
+    },
+    {
+      label: "Documents stored",
+      value: certificatesCount + infoSheetsCount,
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-primary">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+        </svg>
+      ),
+    },
+    {
+      label: "Certificates tracked",
+      value: certificatesCount,
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-primary">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+          <polyline points="22 4 12 14.01 9 11.01" />
+        </svg>
+      ),
+    },
+    {
+      label: "Info Sheets served",
+      value: infoSheetsCount,
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-primary">
+          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+          <polyline points="22,6 12,13 2,6" />
+        </svg>
+      ),
+    },
+  ];
+
+  return (
+    <section className="mt-10" aria-labelledby="history-heading">
+      <div className="rounded-xl border border-border bg-card p-6 sm:p-8 shadow-sm">
+        <h2 id="history-heading" className="text-xl sm:text-2xl font-bold mb-6">
+          Your Compliance History
+        </h2>
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {stats.map((stat) => (
+            <div key={stat.label} className="flex items-start gap-3">
+              <div className="flex-shrink-0 rounded-lg bg-primary/10 p-2.5">
+                {stat.icon}
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{stat.value}</p>
+                <p className="text-sm text-muted">{stat.label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        {memberSince && (
+          <p className="mt-6 pt-4 border-t border-border text-base text-muted">
+            Member since <strong className="text-foreground">{memberSince}</strong>
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 

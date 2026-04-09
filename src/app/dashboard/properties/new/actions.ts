@@ -32,6 +32,16 @@ export async function addProperty(
     redirect("/login");
   }
 
+  // Free tier paywall: limit to 1 property
+  const { count: propertyCount } = await supabase
+    .from("properties")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id);
+
+  if ((propertyCount ?? 0) >= 1) {
+    redirect("/dashboard/upgrade");
+  }
+
   // Insert property
   const { data: property, error: propError } = await supabase
     .from("properties")

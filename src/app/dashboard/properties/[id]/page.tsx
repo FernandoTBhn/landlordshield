@@ -123,19 +123,45 @@ export default async function PropertyDetailPage({
 
       {/* Property header */}
       <div className="mb-10">
-        <h1 className="text-2xl sm:text-3xl font-bold mb-2">
-          {property.address_line_1 || property.name}
-        </h1>
-        {tenant && (
-          <p className="text-lg text-muted">
-            Tenant: <strong className="text-foreground">{tenant.full_name}</strong>
-            {tenant.tenancy_type && (
-              <span className="ml-2 text-base">
-                — {TENANCY_TYPE_LABELS[tenant.tenancy_type] ?? tenant.tenancy_type}
-              </span>
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold mb-2">
+              {property.address_line_1 || property.name}
+            </h1>
+            {tenant && (
+              <p className="text-lg text-muted">
+                Tenant: <strong className="text-foreground">{tenant.full_name}</strong>
+                {tenant.tenancy_type && (
+                  <span className="ml-2 text-base">
+                    — {TENANCY_TYPE_LABELS[tenant.tenancy_type] ?? tenant.tenancy_type}
+                  </span>
+                )}
+              </p>
             )}
-          </p>
-        )}
+          </div>
+          <a
+            href={`/api/compliance-report?propertyId=${id}`}
+            className="inline-flex h-[48px] items-center justify-center gap-2 rounded-lg border-2 border-primary px-6 text-base font-semibold text-primary transition-colors hover:bg-primary/5 shrink-0"
+            download
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 20 20"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M10 3v10m0 0l-3.5-3.5M10 13l3.5-3.5M3 16h14"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            Download Report
+          </a>
+        </div>
       </div>
 
       {/* Send Info Sheet */}

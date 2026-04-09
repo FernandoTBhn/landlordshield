@@ -1,0 +1,34 @@
+# LandlordShield
+
+> UK landlord compliance software for the Renters' Rights Act
+
+LandlordShield helps UK landlords with 1–5 rental properties stay compliant with landlord regulations including the Renters' Rights Act 2025.
+
+## What it does
+
+- Serves the legally required Information Sheet (Prescribed Information under S.213 Housing Act 2004) to tenants via email with PDF proof
+- Tracks five key compliance certificates: Gas Safety (CP12), Electrical Safety (EICR), Energy Performance Certificate (EPC), Deposit Protection, and Smoke & CO Alarms
+- Calculates a compliance score (0–100) per property
+- Sends email alerts at 60, 30, and 14 days before certificate expiry
+- Generates downloadable PDF compliance reports
+
+## Key dates
+
+- 1 May 2025: Renters' Rights Act Phase 1 — new tenancies fall under the Act
+- 31 May 2025: Information Sheet deadline — fines up to £7,000 per tenancy
+- July 2025: Making Tax Digital Q1 deadline
+
+## Pricing
+
+- Free: 1 property, full compliance checklist, Information Sheet delivery, compliance score, PDF reports
+- Shield (£99/year): Unlimited properties, expiry email alerts, priority support, compliance history export
+
+## Tech stack
+
+- Next.js (App Router), TypeScript, Tailwind CSS, Supabase, Resend, PostHog
+
+## Links
+
+- Website: https://landlordshield.co.uk
+- Sign up: https://landlordshield.co.uk/signup
+- Dashboard: https://landlordshield.co.uk/dashboard (requires login)
