@@ -82,7 +82,7 @@ export default function Home() {
             &mdash;&nbsp;in&nbsp;5&nbsp;minutes
           </h1>
 
-          <p className="text-lg sm:text-xl max-w-2xl mx-auto mb-10 leading-relaxed" style={{ color: "rgba(255,255,255,0.85)" }}>
+          <p className="text-lg sm:text-xl max-w-2xl mx-auto mb-10 leading-relaxed" style={{ color: "rgba(255,255,255,0.95)" }}>
             The Information Sheet deadline is{" "}
             <strong className="text-white">31&nbsp;May&nbsp;2026</strong>. The fine is up
             to <strong style={{ color: "#F5C842" }}>&pound;7,000 per tenancy</strong>.

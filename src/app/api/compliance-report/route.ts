@@ -15,14 +15,6 @@ const TENANCY_TYPE_LABELS: Record<string, string> = {
 };
 
 export async function GET(request: NextRequest) {
-  const propertyId = request.nextUrl.searchParams.get("propertyId");
-  if (!propertyId) {
-    return NextResponse.json(
-      { error: "Missing propertyId" },
-      { status: 400 },
-    );
-  }
-
   const supabase = await createClient();
   const {
     data: { user },
@@ -30,6 +22,14 @@ export async function GET(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorised" }, { status: 401 });
+  }
+
+  const propertyId = request.nextUrl.searchParams.get("propertyId");
+  if (!propertyId) {
+    return NextResponse.json(
+      { error: "Missing propertyId" },
+      { status: 400 },
+    );
   }
 
   // Fetch property
