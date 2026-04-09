@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import type { Property, Tenant, Certificate } from "@/lib/types";
+import type { Property, Tenant, Certificate, MtdRecord } from "@/lib/types";
 import {
   calculateComplianceScore,
   getScoreColour,
@@ -91,6 +91,15 @@ export default async function DashboardPage() {
     }),
   }));
 
+  // Fetch MTD records for current tax year
+  const { data: mtdRecords } = await supabase
+    .from("mtd_records")
+    .select("quarter, status, exported_at, total_income, total_expenses, net_profit")
+    .eq("user_id", user.id)
+    .order("exported_at", { ascending: false });
+
+  const mtdData = (mtdRecords ?? []) as Pick<MtdRecord, "quarter" | "status" | "exported_at" | "total_income" | "total_expenses" | "net_profit">[];
+
   const memberSince = user.created_at
     ? new Date(user.created_at).toLocaleDateString("en-GB", {
         month: "long",
@@ -141,6 +150,9 @@ export default async function DashboardPage() {
           ))}
         </div>
       )}
+
+      {/* MTD Tax Status */}
+      <MtdStatus records={mtdData} />
 
       {/* Your Compliance History */}
       <ComplianceHistory
@@ -382,6 +394,117 @@ function ComplianceHistory({
             Member since <strong className="text-foreground">{memberSince}</strong>
           </p>
         )}
+      </div>
+    </section>
+  );
+}
+
+function MtdStatus({
+  records,
+}: {
+  records: Pick<import("@/lib/types").MtdRecord, "quarter" | "status" | "exported_at" | "total_income" | "total_expenses" | "net_profit">[];
+}) {
+  const quarters = [
+    { value: "Q1", label: "Q1", deadline: "5 Aug" },
+    { value: "Q2", label: "Q2", deadline: "5 Nov" },
+    { value: "Q3", label: "Q3", deadline: "5 Feb" },
+    { value: "Q4", label: "Q4", deadline: "5 May" },
+  ];
+
+  const recordMap = new Map(records.map((r) => [r.quarter, r]));
+
+  // Determine next deadline
+  const now = new Date();
+  const year = now.getFullYear();
+  const deadlineDates = [
+    { q: "Q1", date: new Date(year, 7, 5) },  // 5 Aug
+    { q: "Q2", date: new Date(year, 10, 5) }, // 5 Nov
+    { q: "Q3", date: new Date(year + 1, 1, 5) }, // 5 Feb next year
+    { q: "Q4", date: new Date(year + 1, 4, 5) }, // 5 May next year
+  ];
+
+  const nextDeadline = deadlineDates.find((d) => d.date > now);
+  const nextQ = nextDeadline
+    ? quarters.find((q) => q.value === nextDeadline.q)
+    : null;
+
+  const daysUntilNext = nextDeadline
+    ? Math.ceil((nextDeadline.date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    : null;
+
+  return (
+    <section className="mt-10" aria-labelledby="mtd-heading">
+      <div className="rounded-xl border border-border bg-card p-6 sm:p-8 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
+            <h2 id="mtd-heading" className="text-xl sm:text-2xl font-bold">
+              Making Tax Digital
+            </h2>
+            {nextQ && daysUntilNext !== null && (
+              <p className="text-base text-muted mt-1">
+                Next deadline: <strong className="text-foreground">{nextQ.label} — {nextQ.deadline}</strong>
+                <span className={`ml-2 font-semibold ${daysUntilNext <= 30 ? "text-danger" : daysUntilNext <= 60 ? "text-warning" : "text-muted"}`}>
+                  ({daysUntilNext} days)
+                </span>
+              </p>
+            )}
+          </div>
+          <Link
+            href="/dashboard/mtd"
+            className="inline-flex h-[48px] items-center justify-center rounded-lg bg-primary px-6 text-base font-semibold text-primary-foreground transition-colors hover:bg-primary/90 shrink-0"
+          >
+            Open MTD Tax Prep
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {quarters.map((q) => {
+            const record = recordMap.get(q.value);
+            const status: "exported" | "in_progress" | "not_started" = record
+              ? (record.status as "exported" | "in_progress")
+              : "not_started";
+
+            const config = {
+              exported: {
+                dot: "bg-success",
+                bg: "border-success/30 bg-success/[0.04]",
+                text: "text-success",
+                label: "Exported",
+              },
+              in_progress: {
+                dot: "bg-warning",
+                bg: "border-warning/30 bg-warning/[0.04]",
+                text: "text-warning",
+                label: "In progress",
+              },
+              not_started: {
+                dot: "bg-muted/40",
+                bg: "border-border",
+                text: "text-muted",
+                label: "Not started",
+              },
+            }[status];
+
+            return (
+              <div
+                key={q.value}
+                className={`rounded-lg border p-4 ${config.bg}`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`h-3 w-3 rounded-full ${config.dot}`} aria-hidden="true" />
+                  <span className="text-lg font-bold">{q.label}</span>
+                </div>
+                <p className={`text-sm font-semibold ${config.text}`}>{config.label}</p>
+                <p className="text-xs text-muted mt-0.5">Due {q.deadline}</p>
+                {record && status === "exported" && (
+                  <p className="text-xs text-muted mt-1">
+                    £{Number(record.net_profit).toLocaleString("en-GB", { minimumFractionDigits: 2 })} net
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </section>
   );

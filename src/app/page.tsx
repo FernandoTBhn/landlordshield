@@ -130,7 +130,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid gap-8 sm:grid-cols-3">
+          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
             <FeatureCard
               icon={
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -161,6 +161,18 @@ export default function Home() {
               }
               title="See your compliance score instantly"
               description="A simple 0–100 score for every property. Green means you're safe. Red means something needs attention. No jargon, no guesswork."
+            />
+            <FeatureCard
+              icon={
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M9 7h6" />
+                  <path d="M9 11h6" />
+                  <path d="M9 15h4" />
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                </svg>
+              }
+              title="Prepare your MTD quarterly submissions"
+              description="Upload your spreadsheet, auto-categorise transactions into HMRC categories, run a health check, and export a CSV ready for your bridging software."
             />
           </div>
         </div>

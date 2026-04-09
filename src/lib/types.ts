@@ -65,6 +65,24 @@ export type CertType =
 
 export type CertStatus = "valid" | "expiring_soon" | "expired";
 
+export type MtdStatus = "in_progress" | "exported";
+
+export type MtdRecord = {
+  id: string;
+  user_id: string;
+  tax_year: string;
+  quarter: string;
+  income_type: string;
+  total_income: number;
+  total_expenses: number;
+  net_profit: number;
+  transaction_count: number;
+  status: MtdStatus;
+  exported_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Certificate = {
   id: string;
   user_id: string;

@@ -974,8 +974,10 @@ function StepSummary({
   const healthColour = { pass: "text-success", warn: "text-warning", fail: "text-danger" }[overallHealth];
   const healthLabel = { pass: "All clear", warn: "Needs review", fail: "Issues found" }[overallHealth];
 
-  // Export CSV
-  const exportCsv = () => {
+  const [exportSaved, setExportSaved] = useState(false);
+
+  // Export CSV + save record to Supabase
+  const exportCsv = async () => {
     const header = "Date,Description,Amount,Category,Confidence,Confirmed\n";
     const rows = transactions.map((t) =>
       [
@@ -989,6 +991,26 @@ function StepSummary({
     );
     const csv = header + rows.join("\n");
     downloadFile(csv, `mtd-${mapping.taxYear}-${mapping.quarter}.csv`, "text/csv");
+
+    // Save MTD record to Supabase
+    try {
+      await fetch("/api/mtd/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          taxYear: mapping.taxYear,
+          quarter: mapping.quarter,
+          incomeType: mapping.incomeType,
+          totalIncome,
+          totalExpenses,
+          netProfit,
+          transactionCount: transactions.length,
+        }),
+      });
+      setExportSaved(true);
+    } catch {
+      // CSV still downloaded, just record didn't save
+    }
   };
 
   // Export health check
